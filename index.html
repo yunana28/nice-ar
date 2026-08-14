@@ -3,12 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NiCE2 小卡</title>
+  <title>NiCE小卡AR</title>
+  <meta property="og:title" content="NiCE小卡AR" />
+  <meta property="og:description" content="掃描卡片，召喚你的角色！" />
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
   <style>
     body { margin: 0; overflow: hidden; }
     .example-container { position: absolute; width: 100%; height: 100%; top: 0; left: 0; }
+    /* 強制隱藏 A-Frame 內建的 VR/AR 進入按鈕，不管設定值有沒有生效都保證看不到 */
+    .a-enter-vr, .a-enter-ar { display: none !important; }
 
     /* ===== Y2K 復古電腦視窗風格 ===== */
 
@@ -21,6 +25,18 @@
       color: transparent;
       -webkit-text-stroke: 0.5px rgba(255,255,255,0.6);
       filter: drop-shadow(0 2px 3px rgba(0,0,0,0.45));
+      letter-spacing: 0.03em;
+    }
+    /* 深色版鉻銀字：給淺色背景（讀取視窗、掃描 banner）用，避免淺字疊淺底看不清楚 */
+    .chrome-text-dark {
+      font-family: 'Arial Black', 'Microsoft JhengHei', sans-serif;
+      font-weight: 900;
+      background: linear-gradient(180deg, #7d8b96 0%, #46545f 20%, #8fa0ab 40%, #2b363f 55%, #5c6d78 70%, #97a7b1 88%, #35424c 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      -webkit-text-stroke: 0.4px rgba(255,255,255,0.35);
+      filter: drop-shadow(0 1px 1px rgba(255,255,255,0.5));
       letter-spacing: 0.03em;
     }
 
@@ -102,7 +118,7 @@
       padding: 22px 18px 20px;
       text-align: center;
     }
-    .retro-body .chrome-text.headline {
+    .retro-body .chrome-text-dark.headline {
       font-size: clamp(26px, 8vw, 34px);
       display: block;
       line-height: 1.05;
@@ -149,8 +165,8 @@
       to { transform: translate(-50%, -50%) rotate(360deg); }
     }
     @keyframes corner-glow {
-      0%, 100% { filter: drop-shadow(0 0 3px rgba(180,220,255,0.6)) drop-shadow(0 1px 3px rgba(0,0,0,0.5)); }
-      50% { filter: drop-shadow(0 0 9px rgba(180,220,255,1)) drop-shadow(0 1px 3px rgba(0,0,0,0.5)); }
+      0%, 100% { filter: drop-shadow(0 0 4px rgba(255,255,255,0.9)); }
+      50% { filter: drop-shadow(0 0 10px rgba(255,255,255,1)); }
     }
 
     .scan-reticle {
@@ -161,19 +177,10 @@
       height: calc(var(--reticle-w) * 1.537);
       animation: pulse-scale 2.2s ease-in-out infinite;
     }
-    .scan-ring {
-      position: absolute; top: 50%; left: 50%;
-      width: calc(var(--reticle-w) * 1.28);
-      height: calc(var(--reticle-w) * 1.28);
-      transform: translate(-50%, -50%);
-      border-radius: 50%;
-      border: 2px dashed rgba(255,255,255,0.55);
-      filter: drop-shadow(0 0 4px rgba(180,220,255,0.6));
-      animation: ring-spin 9s linear infinite;
-    }
     .scan-corner {
       position: absolute; width: 34px; height: 34px;
-      border-color: #eaf5ff;
+      border-color: #ffffff;
+      filter: drop-shadow(0 0 4px rgba(255,255,255,0.9));
       animation: corner-glow 2.2s ease-in-out infinite;
     }
     .scan-corner.tl { top: 0; left: 0; border-top: 5px solid; border-left: 5px solid; border-radius: 8px 0 0 0; }
@@ -208,7 +215,7 @@
         0 6px 18px rgba(20,40,60,0.35);
       animation: pulse-scale 2.2s ease-in-out infinite;
     }
-    .scan-banner .chrome-text {
+    .scan-banner .chrome-text-dark {
       font-size: 16px;
     }
     .scan-banner-dot {
@@ -224,7 +231,32 @@
       opacity: 0;
       transition: opacity 0.5s ease;
     }
-    #frame-canvas.ready { opacity: 1; }
+    #frame-canvas.show { opacity: 1; }
+
+    #found-toast {
+      position: fixed; top: 8%; left: 50%;
+      transform: translate(-50%, -14px);
+      z-index: 650;
+      display: flex; align-items: center; gap: 8px;
+      background: #eef2f4;
+      border-radius: 999px;
+      padding: 10px 22px;
+      box-shadow:
+        inset -1px -1px 0 rgba(90,110,130,0.5),
+        inset 1px 1px 0 rgba(255,255,255,0.9),
+        0 8px 20px rgba(20,40,60,0.4);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+    #found-toast.show { opacity: 1; transform: translate(-50%, 0); }
+    #found-toast .check {
+      width: 20px; height: 20px; border-radius: 50%;
+      background: #4caf6d;
+      color: #fff; font-size: 13px; font-weight: 900;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
 
     .tap-ripple {
       position: fixed; z-index: 700; pointer-events: none;
@@ -276,6 +308,12 @@
   <!-- ===== 相框紙循環動畫：貼在螢幕最上層的固定外框 ===== -->
   <canvas id="frame-canvas"></canvas>
 
+  <!-- ===== 掃到卡片時的確認提示：打勾 + 角色名稱 ===== -->
+  <div id="found-toast">
+    <span class="check">✓</span>
+    <span id="found-toast-label" class="chrome-text-dark">R1</span>
+  </div>
+
   <!-- ===== 讀取畫面：復古電腦視窗風格 ===== -->
   <div id="loading-screen" class="sky-bg">
     <div id="sparkle-layer"></div>
@@ -285,7 +323,7 @@
         <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
       </div>
       <div class="retro-body">
-        <span class="chrome-text headline">UNZIPPING</span>
+        <span class="chrome-text-dark headline">UNZIPPING</span>
         <div id="retro-path" class="retro-path">C:\NICE\Doctor_R1_ch.zip\ 解壓縮中...</div>
         <div class="retro-progress"><div id="progress-fill" class="retro-progress-fill"></div></div>
         <div id="progress-label" class="retro-progress-label">0 / 5 files extracted</div>
@@ -296,7 +334,6 @@
   <!-- ===== 掃描提示畫面：找到卡片前顯示 ===== -->
   <div id="scan-hint">
     <div class="scan-reticle">
-      <div class="scan-ring"></div>
       <div class="scan-corner tl"></div>
       <div class="scan-corner tr"></div>
       <div class="scan-corner bl"></div>
@@ -309,7 +346,7 @@
     </div>
     <div class="scan-banner">
       <span class="scan-banner-dot"></span>
-      <span class="chrome-text">掃描卡片 SCANNING...</span>
+      <span class="chrome-text-dark">掃描卡片 SCANNING...</span>
     </div>
   </div>
 
@@ -448,23 +485,43 @@
       });
     })();
 
-    // 掃描提示：任一張卡片被辨識到就淡出提示，全部遺失時再淡入
-    (function trackScanHint() {
+    // 掃描狀態管理：沒掃到卡片時顯示取景框；掃到卡片時，取景框淡出、相框動畫淡入、並跳出「✓ 角色名稱」確認提示
+    (function trackScanState() {
       var hint = document.getElementById('scan-hint');
+      var frameCanvas = document.getElementById('frame-canvas');
+      var toast = document.getElementById('found-toast');
+      var toastLabel = document.getElementById('found-toast-label');
       var activeCount = 0;
+      var toastTimer = null;
+      var displayNames = { r1: 'R1', matsuko: 'MATSUKO', bzhead: 'BZHEAD', katt: 'KATT', wahaha: 'WAHAHA' };
 
-      function updateHint() {
-        hint.style.opacity = activeCount > 0 ? '0' : '1';
+      function updateVisibility() {
+        var found = activeCount > 0;
+        hint.style.opacity = found ? '0' : '1';
+        frameCanvas.classList.toggle('show', found);
+      }
+
+      function showToast(name) {
+        toastLabel.textContent = displayNames[name] || name;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () {
+          toast.classList.remove('show');
+        }, 1800);
       }
 
       document.querySelectorAll('[mindar-image-target]').forEach(function (targetEl) {
+        var modelEl = targetEl.querySelector('[src^="#"]');
+        var charName = modelEl ? modelEl.getAttribute('src').replace('#', '') : '';
+
         targetEl.addEventListener('targetFound', function () {
           activeCount++;
-          updateHint();
+          updateVisibility();
+          showToast(charName);
         });
         targetEl.addEventListener('targetLost', function () {
           activeCount = Math.max(0, activeCount - 1);
-          updateHint();
+          updateVisibility();
         });
       });
     })();
@@ -511,13 +568,26 @@
       function tick(time) {
         requestAnimationFrame(tick);
         if (loadedCount < FRAME_COUNT) return; // 全部預先載入完成才開始播放，避免播到一半閃爍空白
-        if (!canvas.classList.contains('ready')) canvas.classList.add('ready');
+        // 顯示與否交給 trackScanState 控制（掃到卡片才 show），這裡只負責畫面持續更新
         if (time - lastDrawTime < 1000 / FPS) return;
         lastDrawTime = time;
         drawCover(images[currentFrame]);
         currentFrame = (currentFrame + 1) % FRAME_COUNT;
       }
       requestAnimationFrame(tick);
+    })();
+
+    // 強制移除 VR/AR 進入按鈕：CSS 隱藏可能被 A-Frame 自己的 inline style 蓋回來，這裡直接用 JS 整個刪掉節點保證不會再出現
+    (function removeVrButton() {
+      function purge() {
+        document.querySelectorAll('.a-enter-vr, .a-enter-ar, .a-enter-vr-button, .a-enter-ar-button').forEach(function (el) {
+          el.remove();
+        });
+      }
+      purge();
+      document.querySelector('a-scene').addEventListener('loaded', purge);
+      setTimeout(purge, 500);
+      setTimeout(purge, 1500);
     })();
 
     // 互動小巧思：手指點畫面會有一圈漣漪效果
