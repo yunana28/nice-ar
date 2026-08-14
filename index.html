@@ -217,6 +217,15 @@
       animation: twinkle 1s ease-in-out infinite;
     }
 
+    #frame-canvas {
+      position: fixed; inset: 0; z-index: 580;
+      width: 100vw; height: 100vh;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    #frame-canvas.ready { opacity: 1; }
+
     .tap-ripple {
       position: fixed; z-index: 700; pointer-events: none;
       width: 60px; height: 60px; border-radius: 50%;
@@ -264,6 +273,9 @@
   </script>
 </head>
 <body>
+  <!-- ===== 相框紙循環動畫：貼在螢幕最上層的固定外框 ===== -->
+  <canvas id="frame-canvas"></canvas>
+
   <!-- ===== 讀取畫面：復古電腦視窗風格 ===== -->
   <div id="loading-screen" class="sky-bg">
     <div id="sparkle-layer"></div>
@@ -455,6 +467,57 @@
           updateHint();
         });
       });
+    })();
+
+    // 相框紙循環動畫：96 張 WebP 序列圖，貼滿螢幕（cover 模式，保比例不變形，超出部分裁掉）
+    (function playFrameAnimation() {
+      var FRAME_COUNT = 96;
+      var FPS = 24; // 如果動畫播放速度跟你原本設計的不一樣，改這個數字就好（例如原本是12fps循環4秒，這裡就填12）
+      var canvas = document.getElementById('frame-canvas');
+      var ctx = canvas.getContext('2d');
+      var images = [];
+      var loadedCount = 0;
+      var currentFrame = 0;
+      var lastDrawTime = 0;
+
+      function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+      for (var i = 0; i < FRAME_COUNT; i++) {
+        var img = new Image();
+        img.src = 'assets/frame_anim/web_' + pad(i) + '.webp';
+        img.onload = function () { loadedCount++; };
+        images.push(img);
+      }
+
+      function resizeCanvas() {
+        var dpr = window.devicePixelRatio || 1;
+        canvas.width = window.innerWidth * dpr;
+        canvas.height = window.innerHeight * dpr;
+      }
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      function drawCover(img) {
+        var cw = canvas.width, ch = canvas.height;
+        var iw = img.naturalWidth, ih = img.naturalHeight;
+        if (!iw || !ih) return;
+        var scale = Math.max(cw / iw, ch / ih);
+        var dw = iw * scale, dh = ih * scale;
+        var dx = (cw - dw) / 2, dy = (ch - dh) / 2;
+        ctx.clearRect(0, 0, cw, ch);
+        ctx.drawImage(img, dx, dy, dw, dh);
+      }
+
+      function tick(time) {
+        requestAnimationFrame(tick);
+        if (loadedCount < FRAME_COUNT) return; // 全部預先載入完成才開始播放，避免播到一半閃爍空白
+        if (!canvas.classList.contains('ready')) canvas.classList.add('ready');
+        if (time - lastDrawTime < 1000 / FPS) return;
+        lastDrawTime = time;
+        drawCover(images[currentFrame]);
+        currentFrame = (currentFrame + 1) % FRAME_COUNT;
+      }
+      requestAnimationFrame(tick);
     })();
 
     // 互動小巧思：手指點畫面會有一圈漣漪效果
