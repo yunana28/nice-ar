@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NICE認親卡 AR</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    .example-container { position: absolute; width: 100%; height: 100%; top: 0; left: 0; }
+  </style>
+  <script>
+    // 轉一圈（ease-in-out，有加速煞車的速度感）→ 正面停留 → 再轉一圈，無限循環
+    // 要調整速度/停留時間，改 rotate-with-pause 屬性裡的 duration / pause 數字（毫秒）就好
+    AFRAME.registerComponent('rotate-with-pause', {
+      schema: {
+        duration: { type: 'number', default: 2000 }, // 轉一圈要花幾毫秒
+        pause: { type: 'number', default: 3000 }      // 正面停留幾毫秒
+      },
+      init: function () {
+        this.elapsed = 0;
+        this.paused = false;
+        this.pauseElapsed = 0;
+      },
+      easeInOutCubic: function (t) {
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      },
+      tick: function (time, deltaTime) {
+        if (this.paused) {
+          this.pauseElapsed += deltaTime;
+          if (this.pauseElapsed >= this.data.pause) {
+            this.paused = false;
+            this.pauseElapsed = 0;
+            this.elapsed = 0;
+          }
+          return;
+        }
+        this.elapsed += deltaTime;
+        var t = Math.min(this.elapsed / this.data.duration, 1);
+        var eased = this.easeInOutCubic(t);
+        this.el.object3D.rotation.y = eased * Math.PI * 2;
+        if (t >= 1) {
+          this.paused = true;
+        }
+      }
+    });
+  </script>
+</head>
+<body>
+  <div class="example-container">
+    <a-scene
+      mindar-image="imageTargetSrc: assets/targets.mind; autoStart: true; uiScanning: yes;"
+      color-space="sRGB"
+      renderer="colorManagement: true, physicallyCorrectLights"
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: true"
+    >
+      <a-assets>
+        <a-asset-item id="r1" src="assets/r1.glb"></a-asset-item>
+        <a-asset-item id="matsuko" src="assets/matsuko.glb"></a-asset-item>
+        <a-asset-item id="bzhead" src="assets/bzhead.glb"></a-asset-item>
+        <a-asset-item id="katt" src="assets/katt.glb"></a-asset-item>
+        <a-asset-item id="wahaha" src="assets/wahaha.glb"></a-asset-item>
+      </a-assets>
+
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+      <!-- 三點打光：基礎補光（弱）+ 主光（強，決定明暗立體感）+ 補光（對側，柔和不死黑）+ 輪廓光（背後，勾出邊緣質感） -->
+      <a-entity light="type: ambient; color: #ffffff; intensity: 0.35"></a-entity>
+      <a-entity light="type: directional; color: #fff4e0; intensity: 1.4" position="1 1.6 1"></a-entity>
+      <a-entity light="type: directional; color: #cfe8ff; intensity: 0.45" position="-1 0.8 0.6"></a-entity>
+      <a-entity light="type: directional; color: #ffffff; intensity: 0.3" position="0 0.3 1"></a-entity>
+      <a-entity light="type: directional; color: #ffffff; intensity: 0.9" position="-0.3 1.2 -1.2"></a-entity>
+
+      <!-- targetIndex 對應上傳到 MindAR 編譯工具時的圖片順序（第一張是 0，第二張是 1，以此類推） -->
+      <a-entity mindar-image-target="targetIndex: 0">
+        <a-gltf-model
+          rotation="0 0 0"
+          position="0 0 0"
+          scale="0.05 0.05 0.05"
+          src="#r1"
+          rotate-with-pause="duration: 2000; pause: 3000"
+        ></a-gltf-model>
+      </a-entity>
+
+      <a-entity mindar-image-target="targetIndex: 1">
+        <a-gltf-model
+          rotation="0 0 0"
+          position="0 0 0"
+          scale="0.05 0.05 0.05"
+          src="#matsuko"
+          rotate-with-pause="duration: 2000; pause: 3000"
+        ></a-gltf-model>
+      </a-entity>
+
+      <a-entity mindar-image-target="targetIndex: 2">
+        <a-gltf-model
+          rotation="0 0 0"
+          position="0 0 0"
+          scale="0.05 0.05 0.05"
+          src="#bzhead"
+          rotate-with-pause="duration: 2000; pause: 3000"
+        ></a-gltf-model>
+      </a-entity>
+
+      <a-entity mindar-image-target="targetIndex: 3">
+        <a-gltf-model
+          rotation="0 0 0"
+          position="0 0 0"
+          scale="0.05 0.05 0.05"
+          src="#katt"
+          rotate-with-pause="duration: 2000; pause: 3000"
+        ></a-gltf-model>
+      </a-entity>
+
+      <a-entity mindar-image-target="targetIndex: 4">
+        <a-gltf-model
+          rotation="0 0 0"
+          position="0 0 0"
+          scale="0.05 0.05 0.05"
+          src="#wahaha"
+          rotate-with-pause="duration: 2000; pause: 3000"
+        ></a-gltf-model>
+      </a-entity>
+    </a-scene>
+  </div>
+</body>
+</html>
