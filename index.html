@@ -145,42 +145,76 @@
       pointer-events: none;
       transition: opacity 0.4s ease;
     }
+    @keyframes ring-spin {
+      to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    @keyframes corner-glow {
+      0%, 100% { filter: drop-shadow(0 0 3px rgba(180,220,255,0.6)) drop-shadow(0 1px 3px rgba(0,0,0,0.5)); }
+      50% { filter: drop-shadow(0 0 9px rgba(180,220,255,1)) drop-shadow(0 1px 3px rgba(0,0,0,0.5)); }
+    }
+
     .scan-reticle {
       /* 比例對應卡片實際尺寸 4501 x 6918（約 1:1.537），不是正方形 */
       position: relative;
-      --reticle-w: min(58vw, 240px);
+      --reticle-w: min(74vw, 320px);
       width: var(--reticle-w);
       height: calc(var(--reticle-w) * 1.537);
       animation: pulse-scale 2.2s ease-in-out infinite;
     }
-    .scan-corner {
-      position: absolute; width: 28px; height: 28px;
-      border-color: #fff;
-      filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));
+    .scan-ring {
+      position: absolute; top: 50%; left: 50%;
+      width: calc(var(--reticle-w) * 1.28);
+      height: calc(var(--reticle-w) * 1.28);
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      border: 2px dashed rgba(255,255,255,0.55);
+      filter: drop-shadow(0 0 4px rgba(180,220,255,0.6));
+      animation: ring-spin 9s linear infinite;
     }
-    .scan-corner.tl { top: 0; left: 0; border-top: 4px solid; border-left: 4px solid; border-radius: 6px 0 0 0; }
-    .scan-corner.tr { top: 0; right: 0; border-top: 4px solid; border-right: 4px solid; border-radius: 0 6px 0 0; }
-    .scan-corner.bl { bottom: 0; left: 0; border-bottom: 4px solid; border-left: 4px solid; border-radius: 0 0 0 6px; }
-    .scan-corner.br { bottom: 0; right: 0; border-bottom: 4px solid; border-right: 4px solid; border-radius: 0 0 6px 0; }
+    .scan-corner {
+      position: absolute; width: 34px; height: 34px;
+      border-color: #eaf5ff;
+      animation: corner-glow 2.2s ease-in-out infinite;
+    }
+    .scan-corner.tl { top: 0; left: 0; border-top: 5px solid; border-left: 5px solid; border-radius: 8px 0 0 0; }
+    .scan-corner.tr { top: 0; right: 0; border-top: 5px solid; border-right: 5px solid; border-radius: 0 8px 0 0; }
+    .scan-corner.bl { bottom: 0; left: 0; border-bottom: 5px solid; border-left: 5px solid; border-radius: 0 0 0 8px; }
+    .scan-corner.br { bottom: 0; right: 0; border-bottom: 5px solid; border-right: 5px solid; border-radius: 0 0 8px 0; }
+    .scan-corner-spark {
+      position: absolute; font-size: 16px; color: #fff;
+      -webkit-text-stroke: 0.5px #9fb3c0;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+      animation: twinkle 1.8s ease-in-out infinite;
+    }
+    .scan-corner-spark.tl { top: -10px; left: -10px; }
+    .scan-corner-spark.tr { top: -10px; right: -10px; animation-delay: 0.4s; }
+    .scan-corner-spark.bl { bottom: -10px; left: -10px; animation-delay: 0.8s; }
+    .scan-corner-spark.br { bottom: -10px; right: -10px; animation-delay: 1.2s; }
     .scan-line {
-      position: absolute; left: 4%; right: 4%; height: 2px;
+      position: absolute; left: 4%; right: 4%; height: 3px;
       background: linear-gradient(90deg, rgba(255,255,255,0), #cfe8ff, rgba(255,255,255,0));
-      box-shadow: 0 0 8px 2px rgba(180,220,255,0.9);
+      box-shadow: 0 0 12px 3px rgba(180,220,255,0.95);
       animation: scan-sweep 2.2s ease-in-out infinite;
     }
     .scan-banner {
-      margin-top: 22px;
+      margin-top: 24px;
+      display: flex; align-items: center; gap: 8px;
       background: #eef2f4;
       border-radius: 999px;
-      padding: 8px 20px;
+      padding: 9px 22px;
       box-shadow:
         inset -1px -1px 0 rgba(90,110,130,0.5),
         inset 1px 1px 0 rgba(255,255,255,0.9),
-        0 6px 16px rgba(20,40,60,0.3);
+        0 6px 18px rgba(20,40,60,0.35);
       animation: pulse-scale 2.2s ease-in-out infinite;
     }
     .scan-banner .chrome-text {
-      font-size: 15px;
+      font-size: 16px;
+    }
+    .scan-banner-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #5b9bd5;
+      animation: twinkle 1s ease-in-out infinite;
     }
 
     .tap-ripple {
@@ -235,14 +269,14 @@
     <div id="sparkle-layer"></div>
     <div class="retro-window">
       <div class="retro-titlebar">
-        <span>Doctor R1 Explorer.exe</span>
+        <span>Doctor_R1_ch.zip</span>
         <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
       </div>
       <div class="retro-body">
-        <span class="chrome-text headline">LOADING</span>
-        <div class="retro-path">C:\NICE\正在載入角色檔案...</div>
+        <span class="chrome-text headline">UNZIPPING</span>
+        <div id="retro-path" class="retro-path">C:\NICE\Doctor_R1_ch.zip\ 解壓縮中...</div>
         <div class="retro-progress"><div id="progress-fill" class="retro-progress-fill"></div></div>
-        <div id="progress-label" class="retro-progress-label">0 / 5 files</div>
+        <div id="progress-label" class="retro-progress-label">0 / 5 files extracted</div>
       </div>
     </div>
   </div>
@@ -250,13 +284,21 @@
   <!-- ===== 掃描提示畫面：找到卡片前顯示 ===== -->
   <div id="scan-hint">
     <div class="scan-reticle">
+      <div class="scan-ring"></div>
       <div class="scan-corner tl"></div>
       <div class="scan-corner tr"></div>
       <div class="scan-corner bl"></div>
       <div class="scan-corner br"></div>
+      <div class="scan-corner-spark tl">✦</div>
+      <div class="scan-corner-spark tr">✧</div>
+      <div class="scan-corner-spark bl">✧</div>
+      <div class="scan-corner-spark br">✦</div>
       <div class="scan-line"></div>
     </div>
-    <div class="scan-banner"><span class="chrome-text">掃描卡片 SCANNING...</span></div>
+    <div class="scan-banner">
+      <span class="scan-banner-dot"></span>
+      <span class="chrome-text">掃描卡片 SCANNING...</span>
+    </div>
   </div>
 
   <div class="example-container">
@@ -288,8 +330,8 @@
       <a-entity mindar-image-target="targetIndex: 0">
         <a-gltf-model
           rotation="0 0 0"
-          position="0 0 0"
-          scale="0.15 0.15 0.15"
+          position="0.063 -1.740 0"
+          scale="0.3 0.3 0.3"
           src="#r1"
           rotate-with-pause="duration: 2000; pause: 3000"
         ></a-gltf-model>
@@ -298,8 +340,8 @@
       <a-entity mindar-image-target="targetIndex: 1">
         <a-gltf-model
           rotation="0 0 0"
-          position="0 0 0"
-          scale="0.15 0.15 0.15"
+          position="0.012 -1.857 0"
+          scale="0.3 0.3 0.3"
           src="#matsuko"
           rotate-with-pause="duration: 2000; pause: 3000"
         ></a-gltf-model>
@@ -308,8 +350,8 @@
       <a-entity mindar-image-target="targetIndex: 2">
         <a-gltf-model
           rotation="0 0 0"
-          position="0 0 0"
-          scale="0.15 0.15 0.15"
+          position="0 -1.556 0"
+          scale="0.3 0.3 0.3"
           src="#bzhead"
           rotate-with-pause="duration: 2000; pause: 3000"
         ></a-gltf-model>
@@ -318,8 +360,8 @@
       <a-entity mindar-image-target="targetIndex: 3">
         <a-gltf-model
           rotation="0 0 0"
-          position="0 0 0"
-          scale="0.15 0.15 0.15"
+          position="0.028 -1.664 0"
+          scale="0.3 0.3 0.3"
           src="#katt"
           rotate-with-pause="duration: 2000; pause: 3000"
         ></a-gltf-model>
@@ -328,8 +370,8 @@
       <a-entity mindar-image-target="targetIndex: 4">
         <a-gltf-model
           rotation="0 0 0"
-          position="0 0 0"
-          scale="0.15 0.15 0.15"
+          position="-0.030 -1.748 0"
+          scale="0.3 0.3 0.3"
           src="#wahaha"
           rotate-with-pause="duration: 2000; pause: 3000"
         ></a-gltf-model>
@@ -359,30 +401,34 @@
       });
     })();
 
-    // 讀取進度：依實際 5 個模型檔案載入完成數量更新進度條
+    // 讀取進度：依實際 5 個模型檔案載入完成數量更新進度條，模擬解壓縮出每個角色的感覺
     (function trackLoading() {
       var total = 5;
       var loaded = 0;
       var fill = document.getElementById('progress-fill');
       var label = document.getElementById('progress-label');
+      var pathEl = document.getElementById('retro-path');
       var ids = ['r1', 'matsuko', 'bzhead', 'katt', 'wahaha'];
+      var displayNames = { r1: 'R1', matsuko: 'Matsuko', bzhead: 'Bzhead', katt: 'Katt', wahaha: 'Wahaha' };
 
-      function bump() {
+      function bump(name) {
         loaded = Math.min(loaded + 1, total);
         var pct = Math.max(2, Math.round((loaded / total) * 100));
         fill.style.width = pct + '%';
-        label.textContent = loaded + ' / ' + total + ' files';
+        label.textContent = loaded + ' / ' + total + ' files extracted';
+        pathEl.textContent = 'C:\\NICE\\Doctor_R1_ch.zip\\ ' + displayNames[name] + '.glb ✔ 解壓完成';
       }
 
       ids.forEach(function (id) {
         var el = document.getElementById(id);
-        if (el) el.addEventListener('loaded', bump);
+        if (el) el.addEventListener('loaded', function () { bump(id); });
       });
 
       var sceneEl = document.querySelector('a-scene');
       sceneEl.addEventListener('loaded', function () {
         fill.style.width = '100%';
-        label.textContent = total + ' / ' + total + ' files';
+        label.textContent = total + ' / ' + total + ' files extracted';
+        pathEl.textContent = 'C:\\NICE\\Doctor_R1_ch.zip\\ 全員解壓縮完成！';
         setTimeout(function () {
           var screen = document.getElementById('loading-screen');
           screen.style.animation = 'fade-out 0.5s ease forwards';
