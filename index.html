@@ -352,17 +352,11 @@
     }
 
     #char-loading-toast {
+      /* 外層只負責定位與淡入淡出，本身沒有背景，讓文字膠囊與進度條各自獨立 */
       position: fixed; top: 50%; left: 50%;
       transform: translate(-50%, -50%) scale(0.92);
       z-index: 650;
-      display: flex; align-items: center; gap: 8px;
-      background: #eef2f4;
-      border-radius: 999px;
-      padding: 10px 22px;
-      box-shadow:
-        inset -1px -1px 0 rgba(90,110,130,0.5),
-        inset 1px 1px 0 rgba(255,255,255,0.9),
-        0 8px 20px rgba(20,40,60,0.4);
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.3s ease, transform 0.3s ease;
@@ -370,19 +364,27 @@
     #char-loading-toast.show {
       opacity: 1; transform: translate(-50%, -50%) scale(1);
     }
-    /* 讀取角色時的進度條：顯示真實下載百分比 */
-    #char-loading-toast .mini-wrap {
-      display: flex; flex-direction: column; gap: 6px; min-width: 150px;
+    /* 文字：維持膠囊造型（內容短，圓角比例好看） */
+    #char-loading-toast .load-pill {
+      display: flex; align-items: center; gap: 8px;
+      background: #eef2f4;
+      border-radius: 999px;
+      padding: 9px 20px;
+      box-shadow:
+        inset -1px -1px 0 rgba(90,110,130,0.5),
+        inset 1px 1px 0 rgba(255,255,255,0.9),
+        0 8px 20px rgba(20,40,60,0.4);
     }
-    #char-loading-toast .mini-row {
+    /* 進度條：獨立一條，用小圓角，不會被拉成膠囊 */
+    #char-loading-toast .load-bar {
       display: flex; align-items: center; gap: 8px;
     }
     .mini-progress {
       position: relative;
-      height: 9px;
+      width: 168px; height: 12px;
       background: #fff;
-      border-radius: 3px;
-      box-shadow: inset 0 0 0 1px #9fb3c0, inset 0 1px 2px rgba(0,0,0,0.15);
+      border-radius: 4px;
+      box-shadow: inset 0 0 0 1px #9fb3c0, inset 0 1px 2px rgba(0,0,0,0.18), 0 3px 10px rgba(20,40,60,0.3);
       overflow: hidden;
     }
     .mini-progress-fill {
@@ -391,11 +393,13 @@
       background-size: 26px 100%;
       animation: progress-stripe 0.7s linear infinite;
       transition: width 0.25s ease-out;
-      border-radius: 3px;
+      border-radius: 4px 0 0 4px;
     }
     #char-loading-pct {
-      font-family: monospace; font-size: 10px; color: #46586a;
-      text-align: right;
+      font-family: monospace; font-size: 11px; font-weight: 700;
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.75);
+      min-width: 34px;
     }
 
     .tap-ripple {
@@ -511,13 +515,13 @@
 
   <!-- ===== 第一次掃到某角色時，現場讀取模型的進度提示 ===== -->
   <div id="char-loading-toast">
-    <div class="mini-wrap">
-      <div class="mini-row">
-        <span class="scan-banner-dot"></span>
-        <span id="char-loading-label" class="chrome-text-dark">讀取角色中...</span>
-      </div>
+    <div class="load-pill">
+      <span class="scan-banner-dot"></span>
+      <span id="char-loading-label" class="chrome-text-dark">讀取角色中...</span>
+    </div>
+    <div class="load-bar">
       <div class="mini-progress"><div id="char-loading-fill" class="mini-progress-fill"></div></div>
-      <div id="char-loading-pct">0%</div>
+      <span id="char-loading-pct">0%</span>
     </div>
   </div>
 
@@ -563,7 +567,7 @@
   <div class="example-container">
     <a-scene
       mindar-image="imageTargetSrc: assets/targets.mind; autoStart: true; uiLoading: no; uiScanning: no; uiError: no;
-                    filterMinCF: 0.00001; filterBeta: 0.5; missTolerance: 40; warmupTolerance: 2;"
+                    filterMinCF: 0.00001; filterBeta: 0.5; missTolerance: 8; warmupTolerance: 2;"
       color-space="sRGB"
       renderer="colorManagement: true; antialias: false; precision: high; logarithmicDepthBuffer: true; maxCanvasWidth: 1280; maxCanvasHeight: 1280"
       shadow="enabled: false"
@@ -585,7 +589,7 @@
         <a-gltf-model
           data-char="r1"
           rotation="0 0 0"
-          position="0 -1.165 0"
+          position="0.044 -1.218 0"
           scale="0.21 0.21 0.21"
           rotate-with-pause="duration: 2000; pause: 3000"
         ></a-gltf-model>
@@ -595,7 +599,7 @@
         <a-gltf-model
           data-char="matsuko"
           rotation="0 0 0"
-          position="-0.009 -1.170 0"
+          position="0.009 -1.300 0"
           scale="0.21 0.21 0.21"
           rotate-with-pause="duration: 2000; pause: 3000"
         ></a-gltf-model>
@@ -605,7 +609,7 @@
         <a-gltf-model
           data-char="bzhead"
           rotation="0 0 0"
-          position="0.039 -1.091 0"
+          position="0.001 -1.089 0"
           scale="0.21 0.21 0.21"
           rotate-with-pause="duration: 2000; pause: 3000"
         ></a-gltf-model>
@@ -615,7 +619,7 @@
         <a-gltf-model
           data-char="katt"
           rotation="0 0 0"
-          position="-0.004 -1.190 0"
+          position="0.020 -1.165 0"
           scale="0.21 0.21 0.21"
           rotate-with-pause="duration: 2000; pause: 3000"
         ></a-gltf-model>
@@ -625,7 +629,7 @@
         <a-gltf-model
           data-char="wahaha"
           rotation="0 0 0"
-          position="-0.049 -1.135 0"
+          position="-0.021 -1.223 0"
           scale="0.21 0.21 0.21"
           rotate-with-pause="duration: 2000; pause: 3000"
         ></a-gltf-model>
