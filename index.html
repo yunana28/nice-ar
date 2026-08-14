@@ -6,6 +6,7 @@
   <title>NiCE小卡AR</title>
   <meta property="og:title" content="NiCE小卡AR" />
   <meta property="og:description" content="掃描卡片，召喚你的角色！" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
   <style>
@@ -146,6 +147,17 @@
       transition: width 0.35s ease;
       border-radius: 3px 0 0 3px;
     }
+    /* 不確定進度時用：一段色塊來回滑動，取代固定百分比 */
+    @keyframes indeterminate-slide {
+      0% { left: -35%; width: 35%; }
+      50% { width: 55%; }
+      100% { left: 100%; width: 35%; }
+    }
+    .retro-progress-fill.indeterminate {
+      position: absolute; width: 35%; left: -35%;
+      animation: progress-stripe 0.7s linear infinite, indeterminate-slide 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    .retro-progress { position: relative; }
     .retro-progress-label {
       margin-top: 6px;
       font-size: 10px;
@@ -165,8 +177,8 @@
       to { transform: translate(-50%, -50%) rotate(360deg); }
     }
     @keyframes corner-glow {
-      0%, 100% { filter: drop-shadow(0 0 4px rgba(255,255,255,0.9)); }
-      50% { filter: drop-shadow(0 0 10px rgba(255,255,255,1)); }
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 1; }
     }
 
     .scan-reticle {
@@ -235,7 +247,7 @@
 
     #found-toast {
       position: fixed; top: 8%; left: 50%;
-      transform: translate(-50%, -14px);
+      transform: translate(-50%, -14px) scale(0.9);
       z-index: 650;
       display: flex; align-items: center; gap: 8px;
       background: #eef2f4;
@@ -247,15 +259,56 @@
         0 8px 20px rgba(20,40,60,0.4);
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.35s ease, transform 0.35s ease;
+      transition: opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
-    #found-toast.show { opacity: 1; transform: translate(-50%, 0); }
+    #found-toast.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
     #found-toast .check {
       width: 20px; height: 20px; border-radius: 50%;
       background: #4caf6d;
       color: #fff; font-size: 13px; font-weight: 900;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
+    }
+
+    #found-star {
+      position: fixed; top: 12%; left: 76%;
+      z-index: 645;
+      font-size: 30px; color: #fff;
+      -webkit-text-stroke: 0.6px #9fb3c0;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+      animation: star-drift 7s ease-in-out infinite, twinkle 2.4s ease-in-out infinite;
+    }
+    #found-star.show { opacity: 1; }
+    @keyframes star-drift {
+      0% { transform: translate(0, 0) rotate(0deg); }
+      25% { transform: translate(16px, -18px) rotate(12deg); }
+      50% { transform: translate(-8px, -30px) rotate(-8deg); }
+      75% { transform: translate(-22px, -10px) rotate(6deg); }
+      100% { transform: translate(0, 0) rotate(0deg); }
+    }
+
+    #char-loading-toast {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%) scale(0.92);
+      z-index: 650;
+      display: flex; align-items: center; gap: 8px;
+      background: #eef2f4;
+      border-radius: 999px;
+      padding: 10px 22px;
+      box-shadow:
+        inset -1px -1px 0 rgba(90,110,130,0.5),
+        inset 1px 1px 0 rgba(255,255,255,0.9),
+        0 8px 20px rgba(20,40,60,0.4);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    #char-loading-toast.show {
+      opacity: 1; transform: translate(-50%, -50%) scale(1);
+      animation: pulse-scale 1.4s ease-in-out infinite;
     }
 
     .tap-ripple {
@@ -308,10 +361,17 @@
   <!-- ===== 相框紙循環動畫：貼在螢幕最上層的固定外框 ===== -->
   <canvas id="frame-canvas"></canvas>
 
-  <!-- ===== 掃到卡片時的確認提示：打勾 + 角色名稱 ===== -->
+  <!-- ===== 掃到卡片時的確認提示：打勾 + 角色名稱，接著變成漂浮星星持續存在 ===== -->
   <div id="found-toast">
     <span class="check">✓</span>
     <span id="found-toast-label" class="chrome-text-dark">R1</span>
+  </div>
+  <div id="found-star">✦</div>
+
+  <!-- ===== 第一次掃到某角色時，現場讀取模型的小提示 ===== -->
+  <div id="char-loading-toast">
+    <span class="scan-banner-dot"></span>
+    <span id="char-loading-label" class="chrome-text-dark">讀取角色中...</span>
   </div>
 
   <!-- ===== 讀取畫面：復古電腦視窗風格 ===== -->
@@ -323,10 +383,9 @@
         <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
       </div>
       <div class="retro-body">
-        <span class="chrome-text-dark headline">UNZIPPING</span>
-        <div id="retro-path" class="retro-path">C:\NICE\Doctor_R1_ch.zip\ 解壓縮中...</div>
-        <div class="retro-progress"><div id="progress-fill" class="retro-progress-fill"></div></div>
-        <div id="progress-label" class="retro-progress-label">0 / 5 files extracted</div>
+        <span class="chrome-text-dark headline">INITIALIZING</span>
+        <div class="retro-path">C:\NICE\ 啟動相機中...</div>
+        <div class="retro-progress"><div id="progress-fill" class="retro-progress-fill indeterminate"></div></div>
       </div>
     </div>
   </div>
@@ -352,19 +411,14 @@
 
   <div class="example-container">
     <a-scene
-      mindar-image="imageTargetSrc: assets/targets.mind; autoStart: true; uiLoading: no; uiScanning: no; uiError: no;"
+      mindar-image="imageTargetSrc: assets/targets.mind; autoStart: true; uiLoading: no; uiScanning: no; uiError: no;
+                    filterMinCF: 0.0001; filterBeta: 10; missTolerance: 20; warmupTolerance: 3;"
       color-space="sRGB"
       renderer="colorManagement: true, physicallyCorrectLights"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: true"
     >
-      <a-assets>
-        <a-asset-item id="r1" src="assets/r1.glb"></a-asset-item>
-        <a-asset-item id="matsuko" src="assets/matsuko.glb"></a-asset-item>
-        <a-asset-item id="bzhead" src="assets/bzhead.glb"></a-asset-item>
-        <a-asset-item id="katt" src="assets/katt.glb"></a-asset-item>
-        <a-asset-item id="wahaha" src="assets/wahaha.glb"></a-asset-item>
-      </a-assets>
+      <!-- 模型不預先載入：掃到哪張卡，哪個角色才現場讀取，初次開網頁才會快 -->
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
@@ -378,50 +432,50 @@
       <!-- targetIndex 對應上傳到 MindAR 編譯工具時的圖片順序（第一張是 0，第二張是 1，以此類推） -->
       <a-entity mindar-image-target="targetIndex: 0">
         <a-gltf-model
+          data-char="r1"
           rotation="0 0 0"
           position="0.063 -1.740 0"
           scale="0.3 0.3 0.3"
-          src="#r1"
           rotate-with-pause="duration: 2000; pause: 3000"
         ></a-gltf-model>
       </a-entity>
 
       <a-entity mindar-image-target="targetIndex: 1">
         <a-gltf-model
+          data-char="matsuko"
           rotation="0 0 0"
           position="0.012 -1.857 0"
           scale="0.3 0.3 0.3"
-          src="#matsuko"
           rotate-with-pause="duration: 2000; pause: 3000"
         ></a-gltf-model>
       </a-entity>
 
       <a-entity mindar-image-target="targetIndex: 2">
         <a-gltf-model
+          data-char="bzhead"
           rotation="0 0 0"
           position="0 -1.556 0"
           scale="0.3 0.3 0.3"
-          src="#bzhead"
           rotate-with-pause="duration: 2000; pause: 3000"
         ></a-gltf-model>
       </a-entity>
 
       <a-entity mindar-image-target="targetIndex: 3">
         <a-gltf-model
+          data-char="katt"
           rotation="0 0 0"
           position="0.028 -1.664 0"
           scale="0.3 0.3 0.3"
-          src="#katt"
           rotate-with-pause="duration: 2000; pause: 3000"
         ></a-gltf-model>
       </a-entity>
 
       <a-entity mindar-image-target="targetIndex: 4">
         <a-gltf-model
+          data-char="wahaha"
           rotation="0 0 0"
           position="-0.030 -1.748 0"
           scale="0.3 0.3 0.3"
-          src="#wahaha"
           rotate-with-pause="duration: 2000; pause: 3000"
         ></a-gltf-model>
       </a-entity>
@@ -450,78 +504,84 @@
       });
     })();
 
-    // 讀取進度：依實際 5 個模型檔案載入完成數量更新進度條，模擬解壓縮出每個角色的感覺
-    (function trackLoading() {
-      var total = 5;
-      var loaded = 0;
-      var fill = document.getElementById('progress-fill');
-      var label = document.getElementById('progress-label');
-      var pathEl = document.getElementById('retro-path');
-      var ids = ['r1', 'matsuko', 'bzhead', 'katt', 'wahaha'];
-      var displayNames = { r1: 'R1', matsuko: 'Matsuko', bzhead: 'Bzhead', katt: 'Katt', wahaha: 'Wahaha' };
-
-      function bump(name) {
-        loaded = Math.min(loaded + 1, total);
-        var pct = Math.max(2, Math.round((loaded / total) * 100));
-        fill.style.width = pct + '%';
-        label.textContent = loaded + ' / ' + total + ' files extracted';
-        pathEl.textContent = 'C:\\NICE\\Doctor_R1_ch.zip\\ ' + displayNames[name] + '.glb ✔ 解壓完成';
-      }
-
-      ids.forEach(function (id) {
-        var el = document.getElementById(id);
-        if (el) el.addEventListener('loaded', function () { bump(id); });
-      });
-
+    // 開場讀取畫面：現在不用等模型（模型改成現場才載入），只要等相機+MindAR準備好就好，速度快很多
+    (function trackInit() {
       var sceneEl = document.querySelector('a-scene');
       sceneEl.addEventListener('loaded', function () {
-        fill.style.width = '100%';
-        label.textContent = total + ' / ' + total + ' files extracted';
-        pathEl.textContent = 'C:\\NICE\\Doctor_R1_ch.zip\\ 全員解壓縮完成！';
-        setTimeout(function () {
-          var screen = document.getElementById('loading-screen');
-          screen.style.animation = 'fade-out 0.5s ease forwards';
-        }, 350);
+        var screen = document.getElementById('loading-screen');
+        screen.style.animation = 'fade-out 0.5s ease forwards';
       });
     })();
 
-    // 掃描狀態管理：沒掃到卡片時顯示取景框；掃到卡片時，取景框淡出、相框動畫淡入、並跳出「✓ 角色名稱」確認提示
+    // 掃描狀態管理：
+    // 沒掃到卡片 → 顯示取景框
+    // 第一次掃到某角色 → 現場讀取那個角色的模型（顯示讀取小提示），讀完才顯示
+    // 掃到且模型已就緒 → 取景框淡出、相框動畫淡入、跳出「✓ 角色名稱」，接著提示變成一顆持續漂浮的星星
     (function trackScanState() {
       var hint = document.getElementById('scan-hint');
       var frameCanvas = document.getElementById('frame-canvas');
       var toast = document.getElementById('found-toast');
       var toastLabel = document.getElementById('found-toast-label');
+      var star = document.getElementById('found-star');
+      var charLoading = document.getElementById('char-loading-toast');
+      var charLoadingLabel = document.getElementById('char-loading-label');
       var activeCount = 0;
       var toastTimer = null;
+      var loadedChars = {};
       var displayNames = { r1: 'R1', matsuko: 'MATSUKO', bzhead: 'BZHEAD', katt: 'KATT', wahaha: 'WAHAHA' };
 
-      function updateVisibility() {
-        var found = activeCount > 0;
-        hint.style.opacity = found ? '0' : '1';
-        frameCanvas.classList.toggle('show', found);
-      }
-
-      function showToast(name) {
+      function showToastThenStar(name) {
         toastLabel.textContent = displayNames[name] || name;
+        star.classList.remove('show');
         toast.classList.add('show');
         clearTimeout(toastTimer);
         toastTimer = setTimeout(function () {
           toast.classList.remove('show');
-        }, 1800);
+          star.classList.add('show');
+        }, 1500);
+      }
+
+      function hideFoundUi() {
+        clearTimeout(toastTimer);
+        toast.classList.remove('show');
+        star.classList.remove('show');
+        frameCanvas.classList.remove('show');
+      }
+
+      function ensureModelLoaded(charName, modelEl, onReady) {
+        if (loadedChars[charName]) { onReady(); return; }
+        if (!modelEl.hasAttribute('gltf-model')) {
+          charLoadingLabel.textContent = '讀取 ' + (displayNames[charName] || charName) + ' 中...';
+          charLoading.classList.add('show');
+          modelEl.setAttribute('gltf-model', 'assets/' + charName + '.glb');
+        }
+        modelEl.addEventListener('model-loaded', function handler() {
+          modelEl.removeEventListener('model-loaded', handler);
+          loadedChars[charName] = true;
+          charLoading.classList.remove('show');
+          onReady();
+        });
       }
 
       document.querySelectorAll('[mindar-image-target]').forEach(function (targetEl) {
-        var modelEl = targetEl.querySelector('[src^="#"]');
-        var charName = modelEl ? modelEl.getAttribute('src').replace('#', '') : '';
+        var modelEl = targetEl.querySelector('[data-char]');
+        var charName = modelEl ? modelEl.getAttribute('data-char') : '';
 
         targetEl.addEventListener('targetFound', function () {
           activeCount++;
-          updateVisibility();
-          showToast(charName);
+          hint.style.opacity = '0';
+          ensureModelLoaded(charName, modelEl, function () {
+            frameCanvas.classList.add('show');
+            showToastThenStar(charName);
+          });
         });
         targetEl.addEventListener('targetLost', function () {
           activeCount = Math.max(0, activeCount - 1);
-          updateVisibility();
+          if (activeCount === 0) {
+            hint.style.opacity = '1';
+            hideFoundUi();
+            charLoading.classList.remove('show');
+          }
         });
       });
     })();
