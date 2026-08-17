@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NiCE小卡AR</title>
+  <meta property="og:title" content="NiCE小卡AR" />
+  <meta property="og:description" content="掃描卡片，召喚你的角色！" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    .example-container { position: absolute; width: 100%; height: 100%; top: 0; left: 0; }
+    /* 強制隱藏 A-Frame 內建的 VR/AR 進入按鈕，不管設定值有沒有生效都保證看不到 */
+    .a-enter-vr, .a-enter-ar { display: none !important; }
+
+    /* ===== Y2K 復古電腦視窗風格 ===== */
+
+    .chrome-text {
+      font-family: 'Arial Black', 'Microsoft JhengHei', sans-serif;
+      font-weight: 900;
+      background: linear-gradient(180deg, #ffffff 0%, #d4dde3 18%, #8fa3b0 38%, #ffffff 52%, #6d818e 68%, #eef3f5 86%, #a7b6bf 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      -webkit-text-stroke: 0.5px rgba(255,255,255,0.6);
+      filter: drop-shadow(0 2px 3px rgba(0,0,0,0.45));
+      letter-spacing: 0.03em;
+    }
+    /* 深色版鉻銀字：給淺色背景（讀取視窗、掃描 banner）用，避免淺字疊淺底看不清楚 */
+    .chrome-text-dark {
+      font-family: 'Arial Black', 'Microsoft JhengHei', sans-serif;
+      font-weight: 900;
+      background: linear-gradient(180deg, #7d8b96 0%, #46545f 20%, #8fa0ab 40%, #2b363f 55%, #5c6d78 70%, #97a7b1 88%, #35424c 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      -webkit-text-stroke: 0.4px rgba(255,255,255,0.35);
+      filter: drop-shadow(0 1px 1px rgba(255,255,255,0.5));
+      letter-spacing: 0.03em;
+    }
+
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.25; transform: scale(0.75) rotate(0deg); }
+      50% { opacity: 1; transform: scale(1.15) rotate(20deg); }
+    }
+    @keyframes float-y {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-12px); }
+    }
+    @keyframes pulse-scale {
+      0%, 100% { transform: scale(1); opacity: 0.9; }
+      50% { transform: scale(1.06); opacity: 1; }
+    }
+    /* 用 transform 位移，不要動 top（動 top 每幀都會觸發版面重算，是掃描線卡頓的主因） */
+    @keyframes scan-sweep {
+      0%   { transform: translateY(calc(var(--reticle-w) * 0.09)); opacity: 0.2; }
+      50%  { opacity: 1; }
+      100% { transform: translateY(calc(var(--reticle-w) * 1.38)); opacity: 0.2; }
+    }
+    @keyframes progress-stripe {
+      0% { background-position: 0 0; }
+      100% { background-position: 32px 0; }
+    }
+    @keyframes ripple-out {
+      0% { transform: scale(0); opacity: 0.9; }
+      100% { transform: scale(1); opacity: 0; }
+    }
+    @keyframes fade-out {
+      to { opacity: 0; visibility: hidden; }
+    }
+
+    .sky-bg {
+      position: fixed; inset: 0; z-index: 500;
+      background:
+        radial-gradient(ellipse at 20% 15%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 35%),
+        radial-gradient(ellipse at 80% 75%, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 30%),
+        linear-gradient(180deg, #bcd8ef 0%, #cfe4f4 40%, #e8eff5 100%);
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity 0.6s ease;
+    }
+    .sparkle {
+      position: absolute;
+      font-size: 22px;
+      color: #fff;
+      -webkit-text-stroke: 0.5px #9fb3c0;
+      filter: drop-shadow(0 2px 2px rgba(0,0,0,0.35));
+      animation: twinkle 2.4s ease-in-out infinite, float-y 4s ease-in-out infinite;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .retro-window {
+      width: min(78vw, 340px);
+      background: #eef2f4;
+      border-radius: 8px;
+      box-shadow:
+        inset -1px -1px 0 rgba(90,110,130,0.5),
+        inset 1px 1px 0 rgba(255,255,255,0.9),
+        0 8px 24px rgba(20,40,60,0.35);
+      overflow: hidden;
+    }
+    .retro-titlebar {
+      background: linear-gradient(90deg, #5c86b8, #8fb6df 55%, #6d95c4);
+      color: #fff;
+      font-size: 11px;
+      font-family: 'Microsoft JhengHei', sans-serif;
+      padding: 6px 8px;
+      display: flex; align-items: center; justify-content: space-between;
+      letter-spacing: 0.03em;
+    }
+    .retro-titlebar .dots { display: flex; gap: 5px; }
+    .retro-titlebar .dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: linear-gradient(145deg, #fff, #b9c6d0);
+      box-shadow: inset -1px -1px 1px rgba(0,0,0,0.25);
+    }
+    .retro-body {
+      padding: 22px 18px 20px;
+      text-align: center;
+    }
+    .retro-body .chrome-text-dark.headline {
+      font-size: clamp(26px, 8vw, 34px);
+      display: block;
+      line-height: 1.05;
+    }
+    .retro-path {
+      margin-top: 6px;
+      font-size: 10px;
+      color: #5c6b78;
+      font-family: monospace;
+      opacity: 0.85;
+    }
+    .retro-progress {
+      margin-top: 16px;
+      height: 14px;
+      background: #fff;
+      border-radius: 3px;
+      box-shadow: inset 0 0 0 1px #9fb3c0, inset 0 2px 3px rgba(0,0,0,0.15);
+      overflow: hidden;
+    }
+    .retro-progress-fill {
+      height: 100%; width: 2%;
+      background-image: repeating-linear-gradient(115deg, #5b9bd5, #5b9bd5 10px, #8ec2ec 10px, #8ec2ec 20px);
+      background-size: 32px 100%;
+      animation: progress-stripe 0.7s linear infinite;
+      transition: width 0.35s ease;
+      border-radius: 3px 0 0 3px;
+    }
+    /* 不確定進度時用：一段色塊來回滑動，取代固定百分比 */
+    @keyframes indeterminate-slide {
+      0% { left: -35%; width: 35%; }
+      50% { width: 55%; }
+      100% { left: 100%; width: 35%; }
+    }
+    .retro-progress-fill.indeterminate {
+      position: absolute; width: 35%; left: -35%;
+      animation: progress-stripe 0.7s linear infinite, indeterminate-slide 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    .retro-progress { position: relative; }
+    .retro-progress-label {
+      margin-top: 6px;
+      font-size: 10px;
+      color: #46586a;
+      font-family: monospace;
+    }
+
+    #loading-screen { z-index: 600; }
+
+    #scan-hint {
+      position: fixed; inset: 0; z-index: 550;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    #scan-hint.show { opacity: 1; }
+    @keyframes ring-spin {
+      to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    @keyframes corner-glow {
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 1; }
+    }
+
+    .scan-reticle {
+      /* 比例對應卡片實際尺寸 4501 x 6918（約 1:1.537），不是正方形 */
+      position: relative;
+      --reticle-w: min(74vw, 320px);
+      width: var(--reticle-w);
+      height: calc(var(--reticle-w) * 1.537);
+      animation: pulse-scale 2.2s ease-in-out infinite;
+    }
+    .scan-corner {
+      position: absolute; width: 38px; height: 38px;
+      color: #ffffff; /* 給 border 簡寫的 currentColor 用，避免顏色被重設成黑色 */
+      filter: drop-shadow(0 0 5px rgba(255,255,255,0.95));
+      animation: corner-glow 2.2s ease-in-out infinite;
+    }
+    /* 顏色一定要寫在簡寫裡，否則 border-color 會被簡寫重設掉（之前顯示黑色的原因） */
+    .scan-corner.tl { top: 0; left: 0; border-top: 5px solid #fff; border-left: 5px solid #fff; border-radius: 8px 0 0 0; }
+    .scan-corner.tr { top: 0; right: 0; border-top: 5px solid #fff; border-right: 5px solid #fff; border-radius: 0 8px 0 0; }
+    .scan-corner.bl { bottom: 0; left: 0; border-bottom: 5px solid #fff; border-left: 5px solid #fff; border-radius: 0 0 0 8px; }
+    .scan-corner.br { bottom: 0; right: 0; border-bottom: 5px solid #fff; border-right: 5px solid #fff; border-radius: 0 0 8px 0; }
+    .scan-corner-spark {
+      position: absolute; font-size: 16px; color: #fff;
+      -webkit-text-stroke: 0.5px #9fb3c0;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+      animation: twinkle 1.8s ease-in-out infinite;
+    }
+    .scan-corner-spark.tl { top: -10px; left: -10px; }
+    .scan-corner-spark.tr { top: -10px; right: -10px; animation-delay: 0.4s; }
+    .scan-corner-spark.bl { bottom: -10px; left: -10px; animation-delay: 0.8s; }
+    .scan-corner-spark.br { bottom: -10px; right: -10px; animation-delay: 1.2s; }
+    .scan-line {
+      position: absolute; top: 0; left: 4%; right: 4%; height: 3px;
+      background: linear-gradient(90deg, rgba(255,255,255,0), #ffffff, rgba(255,255,255,0));
+      box-shadow: 0 0 14px 4px rgba(190,230,255,0.95);
+      animation: scan-sweep 2.2s ease-in-out infinite;
+      will-change: transform, opacity;
+    }
+    /* 第二條掃描線，反向且不同步，讓掃描區更有層次 */
+    .scan-line.secondary {
+      height: 2px;
+      opacity: 0.55;
+      animation: scan-sweep 2.2s ease-in-out infinite reverse;
+      animation-delay: 0.6s;
+    }
+    /* 掃描區內的淡淡格線，強化「正在分析」的感覺 */
+    .scan-grid {
+      position: absolute; inset: 6%;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.13) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.13) 1px, transparent 1px);
+      background-size: 28px 28px;
+      animation: grid-fade 2.6s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes grid-fade {
+      0%, 100% { opacity: 0.25; }
+      50% { opacity: 0.6; }
+    }
+    /* 四角外的旋轉細框，慢慢轉一圈 */
+    .scan-tick {
+      position: absolute; top: 50%; left: 50%;
+      width: calc(var(--reticle-w) * 0.42);
+      height: calc(var(--reticle-w) * 0.42);
+      margin: -1px 0 0 -1px;
+      border: 1px solid rgba(255,255,255,0.35);
+      border-radius: 4px;
+      transform-origin: center;
+      animation: tick-spin 12s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes tick-spin {
+      0% { transform: translate(-50%, -50%) rotate(0deg); }
+      100% { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .scan-banner {
+      margin-top: 24px;
+      display: flex; align-items: center; gap: 8px;
+      background: #eef2f4;
+      border-radius: 999px;
+      padding: 9px 22px;
+      box-shadow:
+        inset -1px -1px 0 rgba(90,110,130,0.5),
+        inset 1px 1px 0 rgba(255,255,255,0.9),
+        0 6px 18px rgba(20,40,60,0.35);
+      animation: pulse-scale 2.2s ease-in-out infinite;
+    }
+    .scan-banner .chrome-text-dark {
+      font-size: 16px;
+    }
+    .scan-banner-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #5b9bd5;
+      animation: twinkle 1s ease-in-out infinite;
+    }
+
+    /* 相框動畫：改用單一動畫 WebP，由瀏覽器原生播放（比 96 張圖逐幀畫到 canvas 省下極大量記憶體與 CPU） */
+    #frame-anim {
+      position: fixed; inset: 0; z-index: 580;
+      width: 100vw; height: 100vh;
+      object-fit: cover;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.45s ease;
+    }
+    #frame-anim.show { opacity: 1; }
+
+    #found-toast {
+      position: fixed; top: 8%; left: 50%;
+      transform: translate(-50%, -14px) scale(0.9);
+      z-index: 650;
+      display: flex; align-items: center; gap: 8px;
+      background: #eef2f4;
+      border-radius: 999px;
+      padding: 10px 22px;
+      box-shadow:
+        inset -1px -1px 0 rgba(90,110,130,0.5),
+        inset 1px 1px 0 rgba(255,255,255,0.9),
+        0 8px 20px rgba(20,40,60,0.4);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    #found-toast.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    /* 圖示會從綠色打勾「翻面」變成銀色星星 */
+    #found-toast .check {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #4caf6d;
+      color: #fff; font-size: 13px; font-weight: 900;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.45s ease, transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    #found-toast .check.to-star {
+      background: transparent;
+      color: #fff;
+      font-size: 20px;
+      transform: rotateY(360deg) scale(1.15);
+      -webkit-text-stroke: 0.5px #8fa3b0;
+      filter: drop-shadow(0 1px 3px rgba(0,0,0,0.35));
+      animation: twinkle 2s ease-in-out infinite;
+    }
+
+    /* 掃到卡片後，畫面上飄動的星星群 */
+    #star-field {
+      position: fixed; inset: 0; z-index: 560;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+    }
+    #star-field.show { opacity: 1; }
+    .drift-star {
+      position: absolute;
+      color: #fff;
+      -webkit-text-stroke: 0.6px #9fb3c0;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));
+      will-change: transform, opacity;
+    }
+    @keyframes star-drift-a {
+      0%   { transform: translate(0, 0) rotate(0deg) scale(0.9); opacity: 0.35; }
+      35%  { transform: translate(18px, -34px) rotate(25deg) scale(1.15); opacity: 1; }
+      70%  { transform: translate(-14px, -62px) rotate(-14deg) scale(0.95); opacity: 0.7; }
+      100% { transform: translate(0, 0) rotate(0deg) scale(0.9); opacity: 0.35; }
+    }
+    @keyframes star-drift-b {
+      0%   { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.4; }
+      40%  { transform: translate(-26px, -22px) rotate(-30deg) scale(1.2); opacity: 1; }
+      75%  { transform: translate(12px, -48px) rotate(16deg) scale(0.9); opacity: 0.6; }
+      100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.4; }
+    }
+
+    #char-loading-toast {
+      /* 外層只負責定位與淡入淡出，本身沒有背景，讓文字膠囊與進度條各自獨立 */
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%) scale(0.92);
+      z-index: 650;
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    #char-loading-toast.show {
+      opacity: 1; transform: translate(-50%, -50%) scale(1);
+    }
+    /* 文字：維持膠囊造型（內容短，圓角比例好看） */
+    #char-loading-toast .load-pill {
+      display: flex; align-items: center; gap: 8px;
+      background: #eef2f4;
+      border-radius: 999px;
+      padding: 9px 20px;
+      box-shadow:
+        inset -1px -1px 0 rgba(90,110,130,0.5),
+        inset 1px 1px 0 rgba(255,255,255,0.9),
+        0 8px 20px rgba(20,40,60,0.4);
+    }
+    /* 進度條：獨立一條，用小圓角，不會被拉成膠囊 */
+    #char-loading-toast .load-bar {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .mini-progress {
+      position: relative;
+      width: 168px; height: 12px;
+      background: #fff;
+      border-radius: 4px;
+      box-shadow: inset 0 0 0 1px #9fb3c0, inset 0 1px 2px rgba(0,0,0,0.18), 0 3px 10px rgba(20,40,60,0.3);
+      overflow: hidden;
+    }
+    .mini-progress-fill {
+      height: 100%; width: 0%;
+      background-image: repeating-linear-gradient(115deg, #5b9bd5, #5b9bd5 8px, #8ec2ec 8px, #8ec2ec 16px);
+      background-size: 26px 100%;
+      animation: progress-stripe 0.7s linear infinite;
+      transition: width 0.25s ease-out;
+      border-radius: 4px 0 0 4px;
+    }
+    #char-loading-pct {
+      font-family: monospace; font-size: 11px; font-weight: 700;
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.75);
+      min-width: 34px;
+    }
+
+    .tap-ripple {
+      position: fixed; z-index: 700; pointer-events: none;
+      width: 70px; height: 70px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.85);
+      transform: translate(-50%, -50%);
+      animation: ripple-out 0.55s ease-out forwards;
+      will-change: transform, opacity;
+    }
+
+    /* ===== 拍拍互動：Fluent emoji 手掌 + 噴出愛心星星 ===== */
+    .pat-hand {
+      position: fixed; z-index: 720; pointer-events: none;
+      width: 76px; height: 76px;
+      margin: -38px 0 0 -38px;
+      animation: pat-press 0.62s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      will-change: transform, opacity;
+    }
+    @keyframes pat-press {
+      0%   { transform: translate(6px, -30px) rotate(-28deg) scale(0.55); opacity: 0; }
+      28%  { transform: translate(0, 0) rotate(-6deg) scale(1.12); opacity: 1; }
+      45%  { transform: translate(0, 6px) rotate(4deg) scale(0.92); opacity: 1; }
+      62%  { transform: translate(0, -2px) rotate(-8deg) scale(1.04); opacity: 1; }
+      78%  { transform: translate(0, 3px) rotate(3deg) scale(0.98); opacity: 0.9; }
+      100% { transform: translate(2px, -16px) rotate(-4deg) scale(0.8); opacity: 0; }
+    }
+
+    .pat-particle {
+      position: fixed; z-index: 715; pointer-events: none;
+      width: 40px; height: 40px;
+      margin: -20px 0 0 -20px;
+      will-change: transform, opacity;
+    }
+    @keyframes pat-burst {
+      0%   { transform: translate(0, 0) scale(0.3) rotate(0deg); opacity: 0; }
+      18%  { opacity: 1; }
+      100% { transform: translate(var(--dx), var(--dy)) scale(var(--sc)) rotate(var(--rot)); opacity: 0; }
+    }
+
+    /* 初始不進版面：不在版面上 = 瀏覽器完全不會跑它們的動畫、也不會解碼相框那 96 張圖。
+       這條必須放在最後，否則會被上面各自的 display:flex 覆蓋掉。 */
+    #frame-anim, #star-field, #found-toast, #char-loading-toast { display: none; }
+  </style>
+  <script>
+    // 轉一圈（ease-in-out，有加速煞車的速度感）→ 正面停留 → 再轉一圈，無限循環
+    // 要調整速度/停留時間，改 rotate-with-pause 屬性裡的 duration / pause 數字（毫秒）就好
+    AFRAME.registerComponent('rotate-with-pause', {
+      schema: {
+        duration: { type: 'number', default: 2000 }, // 轉一圈要花幾毫秒
+        pause: { type: 'number', default: 3000 }      // 正面停留幾毫秒
+      },
+      init: function () {
+        this.elapsed = 0;
+        this.paused = false;
+        this.pauseElapsed = 0;
+        this.baseScale = this.el.object3D.scale.clone();
+        this.bounceT = -1; // -1 = 沒有在彈
+        var self = this;
+        this.el.addEventListener('patted', function () { self.bounceT = 0; });
+      },
+      easeInOutCubic: function (t) {
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      },
+      updateBounce: function (deltaTime) {
+        if (this.bounceT < 0) return;
+        this.bounceT += deltaTime / 460; // 彈一下約 0.46 秒
+        if (this.bounceT >= 1) {
+          this.bounceT = -1;
+          this.el.object3D.scale.copy(this.baseScale);
+          return;
+        }
+        // 先壓扁再回彈，收尾帶一點彈性
+        var p = this.bounceT;
+        var squash = Math.sin(p * Math.PI) * (1 - p) * 0.22;
+        var s = this.baseScale;
+        this.el.object3D.scale.set(
+          s.x * (1 + squash * 0.8),
+          s.y * (1 - squash),
+          s.z * (1 + squash * 0.8)
+        );
+      },
+      tick: function (time, deltaTime) {
+        this.updateBounce(deltaTime);
+        if (this.paused) {
+          this.pauseElapsed += deltaTime;
+          if (this.pauseElapsed >= this.data.pause) {
+            this.paused = false;
+            this.pauseElapsed = 0;
+            this.elapsed = 0;
+          }
+          return;
+        }
+        this.elapsed += deltaTime;
+        var t = Math.min(this.elapsed / this.data.duration, 1);
+        var eased = this.easeInOutCubic(t);
+        this.el.object3D.rotation.y = eased * Math.PI * 2;
+        if (t >= 1) {
+          this.paused = true;
+        }
+      }
+    });
+  </script>
+</head>
+<body>
+  <!-- ===== 相框紙循環動畫：貼在螢幕最上層的固定外框 ===== -->
+  <!-- src 故意留空：等第一次掃到卡片才載入，省下開場 6.2MB 的下載 -->
+  <img id="frame-anim" data-src="assets/frame_anim.webp" data-disp="block" alt="" />
+
+  <!-- ===== 掃到卡片後，畫面上飄動的星星群 ===== -->
+  <div id="star-field" data-disp="block"></div>
+
+  <!-- ===== 掃到卡片時的確認提示：常駐顯示，打勾會翻面變成星星 ===== -->
+  <div id="found-toast" data-disp="flex">
+    <span id="found-icon" class="check">✓</span>
+    <span id="found-toast-label" class="chrome-text-dark">R1</span>
+  </div>
+
+  <!-- ===== 第一次掃到某角色時，現場讀取模型的進度提示 ===== -->
+  <div id="char-loading-toast" data-disp="flex">
+    <div class="load-pill">
+      <span class="scan-banner-dot"></span>
+      <span id="char-loading-label" class="chrome-text-dark">讀取角色中...</span>
+    </div>
+    <div class="load-bar">
+      <div class="mini-progress"><div id="char-loading-fill" class="mini-progress-fill"></div></div>
+      <span id="char-loading-pct">0%</span>
+    </div>
+  </div>
+
+  <!-- ===== 讀取畫面：復古電腦視窗風格 ===== -->
+  <div id="loading-screen" class="sky-bg">
+    <div id="sparkle-layer"></div>
+    <div class="retro-window">
+      <div class="retro-titlebar">
+        <span>Doctor_R1_ch.zip</span>
+        <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+      </div>
+      <div class="retro-body">
+        <span id="boot-headline" class="chrome-text-dark headline">UNZIPPING</span>
+        <div id="boot-path" class="retro-path">C:\NICE\Doctor_R1_ch.zip</div>
+        <div class="retro-progress"><div id="progress-fill" class="retro-progress-fill indeterminate"></div></div>
+        <div id="boot-label" class="retro-progress-label">0 / 5 files</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 掃描提示畫面：找到卡片前顯示 ===== -->
+  <div id="scan-hint" class="show" data-disp="flex">
+    <div class="scan-reticle">
+      <div class="scan-grid"></div>
+      <div class="scan-tick"></div>
+      <div class="scan-corner tl"></div>
+      <div class="scan-corner tr"></div>
+      <div class="scan-corner bl"></div>
+      <div class="scan-corner br"></div>
+      <div class="scan-corner-spark tl">✦</div>
+      <div class="scan-corner-spark tr">✧</div>
+      <div class="scan-corner-spark bl">✧</div>
+      <div class="scan-corner-spark br">✦</div>
+      <div class="scan-line"></div>
+      <div class="scan-line secondary"></div>
+    </div>
+    <div class="scan-banner">
+      <span class="scan-banner-dot"></span>
+      <span class="chrome-text-dark">掃描卡片 SCANNING...</span>
+    </div>
+  </div>
+
+  <div class="example-container">
+    <a-scene
+      mindar-image="imageTargetSrc: assets/targets.mind; autoStart: true; uiLoading: no; uiScanning: no; uiError: no;
+                    filterMinCF: 0.00001; filterBeta: 0.5; missTolerance: 8; warmupTolerance: 2;"
+      color-space="sRGB"
+      renderer="colorManagement: true; antialias: false; precision: high; logarithmicDepthBuffer: true; maxCanvasWidth: 1280; maxCanvasHeight: 1280"
+      shadow="enabled: false"
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: true"
+    >
+      <!-- 模型不預先載入：掃到哪張卡，哪個角色才現場讀取，初次開網頁才會快 -->
+
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+      <!-- 打光精簡成 3 盞（每多一盞方向光，每個像素都要多算一次，是手機端的效能負擔）
+           環境光提高補回整體亮度，主光保留立體感，輪廓光保留邊緣質感 -->
+      <a-entity light="type: ambient; color: #ffffff; intensity: 0.75"></a-entity>
+      <a-entity light="type: directional; color: #fff4e0; intensity: 1.3" position="1 1.6 1"></a-entity>
+      <a-entity light="type: directional; color: #dcefff; intensity: 0.85" position="-0.4 1.2 -1.2"></a-entity>
+
+      <!-- targetIndex 對應上傳到 MindAR 編譯工具時的圖片順序（第一張是 0，第二張是 1，以此類推） -->
+      <a-entity mindar-image-target="targetIndex: 0">
+        <a-gltf-model
+          data-char="r1"
+          rotation="0 0 0"
+          position="0.044 -1.218 0"
+          scale="0.21 0.21 0.21"
+          rotate-with-pause="duration: 2000; pause: 3000"
+        ></a-gltf-model>
+      </a-entity>
+
+      <a-entity mindar-image-target="targetIndex: 1">
+        <a-gltf-model
+          data-char="matsuko"
+          rotation="0 0 0"
+          position="0.009 -1.300 0"
+          scale="0.21 0.21 0.21"
+          rotate-with-pause="duration: 2000; pause: 3000"
+        ></a-gltf-model>
+      </a-entity>
+
+      <a-entity mindar-image-target="targetIndex: 2">
+        <a-gltf-model
+          data-char="bzhead"
+          rotation="0 0 0"
+          position="0.001 -1.089 0"
+          scale="0.21 0.21 0.21"
+          rotate-with-pause="duration: 2000; pause: 3000"
+        ></a-gltf-model>
+      </a-entity>
+
+      <a-entity mindar-image-target="targetIndex: 3">
+        <a-gltf-model
+          data-char="katt"
+          rotation="0 0 0"
+          position="0.020 -1.165 0"
+          scale="0.21 0.21 0.21"
+          rotate-with-pause="duration: 2000; pause: 3000"
+        ></a-gltf-model>
+      </a-entity>
+
+      <a-entity mindar-image-target="targetIndex: 4">
+        <a-gltf-model
+          data-char="wahaha"
+          rotation="0 0 0"
+          position="-0.021 -1.223 0"
+          scale="0.21 0.21 0.21"
+          rotate-with-pause="duration: 2000; pause: 3000"
+        ></a-gltf-model>
+      </a-entity>
+    </a-scene>
+  </div>
+
+  <script>
+    // 星星裝飾：隨機灑在讀取畫面四周，各自不同大小/位置/動畫延遲
+    (function spawnSparkles() {
+      var layer = document.getElementById('sparkle-layer');
+      var glyphs = ['✦', '✧', '⋆'];
+      var spots = [
+        {top: '8%', left: '10%'}, {top: '14%', left: '82%'},
+        {top: '78%', left: '14%'}, {top: '82%', left: '78%'},
+        {top: '45%', left: '4%'}, {top: '40%', left: '92%'}
+      ];
+      spots.forEach(function (spot, i) {
+        var el = document.createElement('div');
+        el.className = 'sparkle';
+        el.textContent = glyphs[i % glyphs.length];
+        el.style.top = spot.top;
+        el.style.left = spot.left;
+        el.style.fontSize = (16 + (i % 3) * 8) + 'px';
+        el.style.animationDelay = (i * 0.3) + 's, ' + (i * 0.4) + 's';
+        layer.appendChild(el);
+      });
+    })();
+
+    // 開場：約 1 秒的解壓縮文字動畫（5 個角色名依序跳出），跑完且相機就緒才淡出
+    (function bootSequence() {
+      var headline = document.getElementById('boot-headline');
+      var pathEl = document.getElementById('boot-path');
+      var labelEl = document.getElementById('boot-label');
+      var names = ['R1', 'MATSUKO', 'BZHEAD', 'KATT', 'WAHAHA'];
+      var STEP_MS = 170;           // 每個檔名停留時間，5 個 × 170ms ≈ 0.85 秒
+      var textDone = false;
+      var sceneReady = false;
+
+      names.forEach(function (n, i) {
+        setTimeout(function () {
+          pathEl.textContent = 'C:\\NICE\\' + n + '.glb  ✔';
+          labelEl.textContent = (i + 1) + ' / ' + names.length + ' files';
+        }, i * STEP_MS);
+      });
+
+      setTimeout(function () {
+        headline.textContent = 'READY';
+        pathEl.textContent = 'C:\\NICE\\ 解壓縮完成';
+        textDone = true;
+        tryFinish();
+      }, names.length * STEP_MS);
+
+      function tryFinish() {
+        if (!textDone || !sceneReady) return;
+        document.getElementById('loading-screen').style.animation = 'fade-out 0.5s ease forwards';
+      }
+
+      var sceneEl = document.querySelector('a-scene');
+      sceneEl.addEventListener('loaded', function () {
+        sceneReady = true;
+        tryFinish();
+      });
+    })();
+
+    // 掃描狀態管理：
+    // 沒掃到卡片 → 顯示取景框
+    // 第一次掃到某角色 → 現場讀取那個角色的模型（顯示讀取小提示），讀完才顯示
+    // 掃到且模型已就緒 → 取景框淡出、相框動畫淡入、跳出「✓ 角色名稱」，接著提示變成一顆持續漂浮的星星
+    (function trackScanState() {
+      var hint = document.getElementById('scan-hint');
+      var frameCanvas = document.getElementById('frame-anim');
+      var toast = document.getElementById('found-toast');
+      var toastLabel = document.getElementById('found-toast-label');
+      var foundIcon = document.getElementById('found-icon');
+      var starField = document.getElementById('star-field');
+      var charLoading = document.getElementById('char-loading-toast');
+      var charLoadingLabel = document.getElementById('char-loading-label');
+      var charLoadingFill = document.getElementById('char-loading-fill');
+      var charLoadingPct = document.getElementById('char-loading-pct');
+      var activeCount = 0;
+      var morphTimer = null;
+      var modelCache = {};   // 角色名 -> blob URL，載過就不再下載
+      var loadingNow = {};
+      var displayNames = { r1: 'R1', matsuko: 'MATSUKO', bzhead: 'BZHEAD', katt: 'KATT', wahaha: 'WAHAHA' };
+
+      // 建立飄動星星群（只建一次，之後靠 show class 控制顯示）
+      (function buildStarField() {
+        var glyphs = ['✦', '✧', '⋆', '✦', '✧', '⋆', '✦', '✧'];
+        var spots = [
+          {t: '14%', l: '12%', s: 26}, {t: '22%', l: '84%', s: 20},
+          {t: '38%', l: '6%',  s: 16}, {t: '46%', l: '90%', s: 24},
+          {t: '64%', l: '16%', s: 22}, {t: '72%', l: '80%', s: 18},
+          {t: '84%', l: '38%', s: 16}, {t: '30%', l: '62%', s: 14}
+        ];
+        spots.forEach(function (sp, i) {
+          var el = document.createElement('div');
+          el.className = 'drift-star';
+          el.textContent = glyphs[i % glyphs.length];
+          el.style.top = sp.t;
+          el.style.left = sp.l;
+          el.style.fontSize = sp.s + 'px';
+          el.style.animation = (i % 2 === 0 ? 'star-drift-a ' : 'star-drift-b ') +
+                               (5.5 + (i % 4) * 1.3) + 's ease-in-out infinite';
+          el.style.animationDelay = (i * 0.45) + 's';
+          starField.appendChild(el);
+        });
+      })();
+
+      // ---- 顯示／隱藏工具 ----
+      // 重點：opacity:0 不會讓瀏覽器停止 CSS 動畫與 WebP 逐幀解碼，必須真的 display:none 才會停。
+      // 所以淡入前先掛回版面，淡出動畫跑完後再移出版面。
+      var hideTimers = {};
+      function fadeIn(el, key) {
+        clearTimeout(hideTimers[key]);
+        // 相框動畫是延遲載入的：第一次要顯示時才給它 src，省下開場 6.2MB 下載
+        if (el.dataset.src && !el.getAttribute('src')) {
+          el.setAttribute('src', el.dataset.src);
+        }
+        el.style.display = el.dataset.disp || 'block';
+        void el.offsetWidth; // 強制套用 display，下一行的 .show 才會有淡入效果
+        el.classList.add('show');
+      }
+      function fadeOut(el, key, ms) {
+        el.classList.remove('show');
+        clearTimeout(hideTimers[key]);
+        hideTimers[key] = setTimeout(function () { el.style.display = 'none'; }, ms || 600);
+      }
+
+      function showFoundUi(name) {
+        toastLabel.textContent = displayNames[name] || name;
+        // 每次重新掃到都先回到打勾狀態，再翻面變星星
+        clearTimeout(morphTimer);
+        foundIcon.classList.remove('to-star');
+        foundIcon.textContent = '✓';
+        fadeIn(toast, 'toast');
+        fadeIn(frameCanvas, 'frame');
+        morphTimer = setTimeout(function () {
+          foundIcon.classList.add('to-star');
+          foundIcon.textContent = '✦';
+          fadeIn(starField, 'stars');
+        }, 1100);
+      }
+
+      function hideFoundUi() {
+        clearTimeout(morphTimer);
+        fadeOut(toast, 'toast', 500);
+        fadeOut(starField, 'stars', 700);
+        fadeOut(frameCanvas, 'frame', 550);
+        fadeOut(charLoading, 'charload', 400);
+      }
+
+      // 用 fetch 串流下載模型，才能拿到真實下載進度（直接給 gltf-model 網址是沒有進度可讀的）
+      function ensureModelLoaded(charName, modelEl, onReady) {
+        if (modelCache[charName]) { onReady(); return; }
+        if (loadingNow[charName]) return;
+        loadingNow[charName] = true;
+
+        charLoadingLabel.textContent = '讀取 ' + (displayNames[charName] || charName) + ' 中...';
+        charLoadingFill.style.width = '0%';
+        charLoadingPct.textContent = '0%';
+        fadeIn(charLoading, 'charload');
+
+        fetch('assets/joined/' + charName + '.glb').then(function (res) {
+          var total = parseInt(res.headers.get('Content-Length') || '0', 10);
+          var received = 0;
+          var chunks = [];
+          var reader = res.body.getReader();
+
+          function pump() {
+            return reader.read().then(function (r) {
+              if (r.done) return new Blob(chunks);
+              chunks.push(r.value);
+              received += r.value.length;
+              if (total) {
+                var pct = Math.min(99, Math.round(received / total * 100));
+                charLoadingFill.style.width = pct + '%';
+                charLoadingPct.textContent = pct + '%';
+              }
+              return pump();
+            });
+          }
+          return pump();
+        }).then(function (blob) {
+          charLoadingFill.style.width = '100%';
+          charLoadingPct.textContent = '100%';
+          var url = URL.createObjectURL(blob);
+          modelCache[charName] = url;
+          modelEl.addEventListener('model-loaded', function handler() {
+            modelEl.removeEventListener('model-loaded', handler);
+            loadingNow[charName] = false;
+            fadeOut(charLoading, 'charload', 400);
+            onReady();
+          });
+          modelEl.setAttribute('gltf-model', 'url(' + url + ')');
+        }).catch(function () {
+          // 下載失敗就退回最單純的載入方式，至少模型還是會出來
+          loadingNow[charName] = false;
+          fadeOut(charLoading, 'charload', 400);
+          modelEl.addEventListener('model-loaded', function handler() {
+            modelEl.removeEventListener('model-loaded', handler);
+            modelCache[charName] = true;
+            onReady();
+          });
+          modelEl.setAttribute('gltf-model', 'assets/joined/' + charName + '.glb');
+        });
+      }
+
+      document.querySelectorAll('[mindar-image-target]').forEach(function (targetEl) {
+        var modelEl = targetEl.querySelector('[data-char]');
+        var charName = modelEl ? modelEl.getAttribute('data-char') : '';
+
+        targetEl.addEventListener('targetFound', function () {
+          activeCount++;
+          fadeOut(hint, 'hint', 450);
+          ensureModelLoaded(charName, modelEl, function () {
+            if (activeCount > 0) showFoundUi(charName);
+          });
+        });
+        targetEl.addEventListener('targetLost', function () {
+          activeCount = Math.max(0, activeCount - 1);
+          if (activeCount === 0) {
+            fadeIn(hint, 'hint');
+            hideFoundUi();
+          }
+        });
+      });
+    })();
+
+    // 強制移除 VR/AR 進入按鈕：CSS 隱藏可能被 A-Frame 自己的 inline style 蓋回來，這裡直接用 JS 整個刪掉節點保證不會再出現
+    (function removeVrButton() {
+      function purge() {
+        document.querySelectorAll('.a-enter-vr, .a-enter-ar, .a-enter-vr-button, .a-enter-ar-button').forEach(function (el) {
+          el.remove();
+        });
+      }
+      purge();
+      document.querySelector('a-scene').addEventListener('loaded', purge);
+      setTimeout(purge, 500);
+      setTimeout(purge, 1500);
+    })();
+
+    // 拍拍互動：點畫面 → 出現 Fluent 手掌拍下去 + 噴出愛心星星 + 角色被拍到會彈一下
+    (function patInteraction() {
+      var EMOJI = ['heart', 'star', 'sparkles', 'twohearts', 'sparkheart'];
+      var lastPat = 0;
+
+      // 先預載 emoji，避免第一次點擊時圖還沒到、閃一下才出現
+      var preloaded = {};
+      ['hand'].concat(EMOJI).forEach(function (n) {
+        var img = new Image();
+        img.src = 'assets/emoji/' + n + '.png';
+        preloaded[n] = img;
+      });
+
+      function spawn(x, y) {
+        // 手掌
+        var hand = document.createElement('img');
+        hand.className = 'pat-hand';
+        hand.src = 'assets/emoji/hand.png';
+        hand.style.left = x + 'px';
+        hand.style.top = y + 'px';
+        document.body.appendChild(hand);
+        setTimeout(function () { hand.remove(); }, 650);
+
+        // 漣漪
+        var ripple = document.createElement('div');
+        ripple.className = 'tap-ripple';
+        ripple.style.left = x + 'px';
+        ripple.style.top = y + 'px';
+        document.body.appendChild(ripple);
+        setTimeout(function () { ripple.remove(); }, 600);
+
+        // 噴出 5 顆 emoji，往上散開後淡出
+        var count = 5;
+        for (var i = 0; i < count; i++) {
+          var p = document.createElement('img');
+          p.className = 'pat-particle';
+          p.src = 'assets/emoji/' + EMOJI[Math.floor(Math.random() * EMOJI.length)] + '.png';
+          p.style.left = x + 'px';
+          p.style.top = y + 'px';
+
+          var angle = (-140 + Math.random() * 100) * Math.PI / 180; // 往上為主的扇形
+          var dist = 70 + Math.random() * 70;
+          p.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
+          p.style.setProperty('--dy', Math.sin(angle) * dist + 'px');
+          p.style.setProperty('--sc', (0.7 + Math.random() * 0.6).toFixed(2));
+          p.style.setProperty('--rot', Math.round(-160 + Math.random() * 320) + 'deg');
+          p.style.animation = 'pat-burst ' + (0.8 + Math.random() * 0.4).toFixed(2) + 's cubic-bezier(0.22, 0.9, 0.3, 1) forwards';
+          p.style.animationDelay = (i * 0.04).toFixed(2) + 's';
+          document.body.appendChild(p);
+          (function (el) { setTimeout(function () { el.remove(); }, 1400); })(p);
+        }
+
+        // 讓正在顯示的角色彈一下，回應這個「拍拍」
+        document.querySelectorAll('[data-char]').forEach(function (el) {
+          if (el.components && el.components['rotate-with-pause'] && el.object3D.visible) {
+            el.emit('patted');
+          }
+        });
+      }
+
+      document.addEventListener('pointerdown', function (e) {
+        var now = Date.now();
+        if (now - lastPat < 160) return; // 節流：連點時不要無限堆疊特效拖慢畫面
+        lastPat = now;
+        spawn(e.clientX, e.clientY);
+      });
+    })();
+  </script>
+</body>
+</html>
